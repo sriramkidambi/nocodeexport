@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NOCODEEXPORT
+
+> Break free from no-code platform lock-in. Export clean, self-contained HTML from your no-code websites.
+
+NOCODEEXPORT extracts websites built with popular no-code platforms and produces clean HTML exports by removing watermarks, redirect scripts, analytics, and platform-specific branding.
+
+## Supported Platforms
+
+- **Framer** - Remove Framer watermarks and redirect scripts
+- **Wix** - Strip Wix ads and branding
+- **Webflow** - Clean Webflow exports
+- **Carrd** - Export Carrd sites without restrictions
+
+## Features
+
+- **Clean HTML Output** - Get self-contained HTML files free from platform watermarks and badges
+- **ZIP Package Export** - Download complete packages with all assets (images, stylesheets, fonts)
+- **Automatic Platform Detection** - Automatically detects the platform from URL
+- **Manual Selection** - Choose the platform manually for better control
+- **Asset Management** - Downloads and packages all external assets
+- **Link Cleanup** - Converts relative URLs to absolute URLs
+- **Privacy-Focused** - Removes analytics and tracking scripts
+
+## How It Works
+
+1. Provide your website URL
+2. Select the output format (Single HTML or ZIP Package)
+3. The tool renders the page using a headless browser
+4. Watermarks, redirects, and tracking scripts are removed
+5. Get your clean, exportable HTML
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- npm, yarn, pnpm, or bun
+
+### Installation
 
 ```bash
+# Install dependencies
+npm install
+# or
+yarn install
+# or
+pnpm install
+```
+
+### Development
+
+```bash
+# Run the development server
 npm run dev
 # or
 yarn dev
 # or
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/
+│   ├── api/export/route.ts    # Main API endpoint
+│   ├── layout.tsx             # Root layout
+│   ├── page.tsx               # Main UI component
+│   └── globals.css           # Global styles
+├── components/
+│   └── ui/                   # Shadcn UI components
+└── lib/
+    ├── processor.ts          # HTML processing logic
+    ├── scraper.ts            # Web scraping functionality
+    └── utils.ts              # Utility functions
+```
 
-## Learn More
+## Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+- **Next.js 16** - React framework
+- **React 19** - UI library
+- **Tailwind CSS** - Styling
+- **Puppeteer** - Headless browser automation
+- **Cheerio** - HTML parsing and manipulation
+- **Adm-Zip** - ZIP file creation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Disclaimer
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+> This is a hacky solution for personal and experimental use only. The tool may break as platforms update their code. It is not recommended for production workloads. For mission-critical sites, please use official export features provided by the platforms.
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
