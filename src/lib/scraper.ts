@@ -1,4 +1,5 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import axios from 'axios';
 
 export interface ScrapedContent {
@@ -22,15 +23,18 @@ export class NoCodeScraper {
   async initialize(): Promise<void> {
     if (this.browser) return;
 
+    // Use @sparticuz/chromium for serverless environments (Vercel)
+    const executablePath = await chromium.executablePath();
+
     this.browser = await puppeteer.launch({
-      headless: true,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
+        ...chromium.args,
         '--disable-web-security',
         '--disable-features=IsolateOrigins,site-per-process',
       ],
+      defaultViewport: chromium.defaultViewport,
+      executablePath,
+      headless: chromium.headless,
     });
     this.page = await this.browser.newPage();
 
@@ -65,14 +69,12 @@ export class NoCodeScraper {
     const normalizedUrl = this.normalizeUrl(url);
 
     try {
-      // Navigate to the page and wait for it to fully render
+      // Navigate to the page - use networkidle2 for faster loading
+      // (considers page loaded when there are no more than 2 network connections for 500ms)
       await this.page.goto(normalizedUrl, {
-        waitUntil: 'networkidle0',
-        timeout: 30000,
+        waitUntil: 'networkidle2',
+        timeout: 8000,
       });
-
-      // Wait a bit more for dynamic content
-      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Get the rendered HTML
       const html = await this.page.content();
@@ -158,7 +160,7 @@ export class NoCodeScraper {
     try {
       const response = await axios.get<ArrayBuffer>(url, {
         responseType: 'arraybuffer',
-        timeout: 10000,
+        timeout: 3000, // Short timeout for assets
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },

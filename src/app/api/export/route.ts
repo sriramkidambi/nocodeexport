@@ -3,7 +3,7 @@ import { getScraper, type ScrapedContent } from '@/lib/scraper';
 import { NoCodeProcessor, type Platform } from '@/lib/processor';
 import AdmZip from 'adm-zip';
 
-export const maxDuration = 60; // 60 second timeout for Vercel
+export const maxDuration = 10; // 10 second limit for Vercel free tier
 
 interface ExportRequest {
   url: string;
@@ -37,6 +37,8 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const scraper = getScraper();
+
   try {
     const body: ExportRequest = await request.json();
 
@@ -59,7 +61,6 @@ export async function POST(request: NextRequest) {
     }
 
     const format = body.format || 'html';
-    const scraper = getScraper();
 
     // Scrape the website
     let scrapedContent: ScrapedContent;
@@ -147,6 +148,9 @@ export async function POST(request: NextRequest) {
       },
       { status: 500, headers: corsHeaders }
     );
+  } finally {
+    // Always close the browser in serverless environments to free resources
+    await scraper.close();
   }
 }
 
