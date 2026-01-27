@@ -1,4 +1,5 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
@@ -53,31 +54,18 @@ export class NoCodeScraper {
     this.browserInitializing = true;
 
     try {
+      // Use @sparticuz/chromium for serverless environments (Vercel)
+      const executablePath = await chromium.executablePath();
+
       this.browser = await puppeteer.launch({
-        headless: true,
         args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
+          ...chromium.args,
           '--disable-web-security',
           '--disable-features=IsolateOrigins,site-per-process',
-          '--disable-gpu',
-          '--disable-dev-shm-usage',
-          '--disable-setuid-sandbox',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process', // Run in single process for serverless
-          '--disable-background-networking',
-          '--disable-default-apps',
-          '--disable-extensions',
-          '--disable-sync',
-          '--metrics-recording-only',
-          '--mute-audio',
-          '--no-first-run',
-          '--safebrowsing-disable-auto-update',
-          '--disable-breakpad',
-          '--disable-component-update',
         ],
+        defaultViewport: chromium.defaultViewport,
+        executablePath,
+        headless: chromium.headless,
       });
 
       this.page = await this.browser.newPage();
