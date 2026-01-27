@@ -4,7 +4,7 @@ import { useState, FormEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Loader2, CheckCircle, AlertCircle, Terminal, FileArchive, Shield, Code, ArrowRight, Github, Cpu, Network, AlertTriangle } from 'lucide-react';
+import { Download, Loader2, CheckCircle, AlertCircle, Terminal, FileArchive, Shield, Code, ArrowRight, Github, Cpu, Network, AlertTriangle, Zap } from 'lucide-react';
 
 type Platform = 'auto' | 'framer' | 'wix' | 'webflow' | 'carrd';
 
@@ -14,6 +14,7 @@ interface ExportState {
   html?: string;
   filename?: string;
   size?: number;
+  mode?: 'puppeteer' | 'cheerio';
 }
 
 const PLATFORMS: { id: Platform; name: string; description: string }[] = [
@@ -24,10 +25,28 @@ const PLATFORMS: { id: Platform; name: string; description: string }[] = [
   { id: 'carrd', name: 'CARRD', description: 'Carrd pages' },
 ];
 
+const TIERS = {
+  light: {
+    name: 'FAST',
+    description: 'Cheerio only, no JS',
+    icon: Zap,
+    color: 'text-green-500',
+    recommended: true,
+  },
+  full: {
+    name: 'FULL',
+    description: 'Puppeteer with JS',
+    icon: Cpu,
+    color: 'text-blue-500',
+    recommended: false,
+  },
+};
+
 export default function Home() {
   const [url, setUrl] = useState('');
   const [format, setFormat] = useState<'html' | 'zip'>('html');
   const [platform, setPlatform] = useState<Platform>('auto');
+  const [tier, setTier] = useState<'light' | 'full'>('light');
   const [exportState, setExportState] = useState<ExportState>({ status: 'idle' });
   const [mounted, setMounted] = useState(false);
 
@@ -45,7 +64,15 @@ export default function Home() {
       const response = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, format, platform }),
+        body: JSON.stringify({
+          url,
+          format,
+          platform,
+          options: {
+            usePuppeteer: tier === 'full',
+            inlineAssets: format === 'zip',
+          },
+        }),
       });
 
       const data = await response.json();
@@ -61,6 +88,7 @@ export default function Home() {
           html: data.html,
           filename: data.filename,
           size: data.size,
+          mode: data.mode,
         });
       } else {
         const blob = await response.blob();
@@ -245,6 +273,47 @@ export default function Home() {
                   </p>
                 </div>
 
+                {/* Processing Tier Selection */}
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-xs font-mono text-muted-foreground uppercase tracking-wider">
+                    <Zap className="w-3.5 h-3.5" />
+                    Processing Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {Object.entries(TIERS).map(([key, config]) => {
+                      const Icon = config.icon;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setTier(key as 'light' | 'full')}
+                          disabled={format === 'zip'}
+                          className={`group px-4 py-4 border transition-all text-left glitch-hover relative ${
+                            tier === key
+                              ? 'border-primary bg-primary/10'
+                              : 'border-border bg-muted/30 hover:border-primary/50'
+                          } ${format === 'zip' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {config.recommended && (
+                            <div className="absolute -top-2 -right-2 px-2 py-0.5 bg-primary text-primary-foreground text-[10px] font-mono font-bold rounded-sm">
+                              FAST
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between mb-2">
+                            <Icon className={`w-5 h-5 ${config.color}`} />
+                            <span className={`w-2 h-2 ${tier === key ? 'bg-primary' : 'bg-muted-foreground/30'} rounded-full`} />
+                          </div>
+                          <div className="font-mono text-sm font-medium">{config.name}</div>
+                          <div className="text-xs text-muted-foreground mt-1">{config.description}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs font-mono text-muted-foreground/70 pl-1">
+                    {format === 'zip' ? '> zip_requires_full_rendering' : tier === 'light' ? '> fast_mode_selected' : '> full_js_rendering'}
+                  </p>
+                </div>
+
                 {/* Format Selection */}
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-xs font-mono text-muted-foreground uppercase tracking-wider">
@@ -254,7 +323,10 @@ export default function Home() {
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setFormat('html')}
+                      onClick={() => {
+                        setFormat('html');
+                        setTier('light');
+                      }}
                       className={`group px-4 py-4 border transition-all text-left glitch-hover ${
                         format === 'html'
                           ? 'border-primary bg-primary/10'
@@ -271,7 +343,10 @@ export default function Home() {
 
                     <button
                       type="button"
-                      onClick={() => setFormat('zip')}
+                      onClick={() => {
+                        setFormat('zip');
+                        setTier('full');
+                      }}
                       className={`group px-4 py-4 border transition-all text-left glitch-hover ${
                         format === 'zip'
                           ? 'border-primary bg-primary/10'
@@ -316,6 +391,11 @@ export default function Home() {
                       <p className="text-green-500 font-mono text-sm">
                         {exportState.message}
                       </p>
+                      {exportState.mode && (
+                        <p className="text-muted-foreground text-xs font-mono mt-1">
+                          mode: {exportState.mode === 'cheerio' ? 'FAST_CHEERIO' : 'FULL_PUPPETEER'}
+                        </p>
+                      )}
                       {exportState.size && (
                         <p className="text-muted-foreground text-xs font-mono mt-1">
                           output_size: {formatSize(exportState.size)}
@@ -352,12 +432,11 @@ export default function Home() {
           <div className="flex items-start gap-3 p-4 border border-yellow-500/30 bg-yellow-500/5 mt-4">
             <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-yellow-500 font-mono text-sm font-medium">DISCLAIMER</p>
+              <p className="text-yellow-500 font-mono text-sm font-medium">OPTIMIZED FOR VERCEL FREE TIER</p>
               <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
-                This is a <span className="text-yellow-500">hacky solution</span> for personal/experimental use only. 
-                Do not rely on this for production workloads. If you have a CMS-based site or need reliable exports, 
-                please use the official export features provided by your no-code platform. 
-                This tool may break at any time as platforms update their code.
+                <span className="text-yellow-500">FAST mode</span> (default) uses Cheerio for quick exports without JS rendering. 
+                <span className="text-yellow-500">FULL mode</span> uses Puppeteer for complete rendering but may timeout on free tier. 
+                ZIP exports limited to 20 assets to stay within size limits.
               </p>
             </div>
           </div>
