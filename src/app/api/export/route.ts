@@ -145,7 +145,9 @@ export async function POST(request: NextRequest) {
         results.forEach((result, index) => {
           if (result.status === 'fulfilled' && result.value.success) {
             const { filename, buffer } = result.value;
-            zip.addFile(`${assetsDir}/${filename}`, buffer);
+            if (buffer) {
+              zip.addFile(`${assetsDir}/${filename}`, buffer);
+            }
           }
         });
       }
