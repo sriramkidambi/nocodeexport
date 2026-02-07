@@ -56,7 +56,13 @@ export class NoCodeProcessor {
       this.removeAnalytics();
     }
     this.removeMetaRefresh();
-    this.cleanAttributes();
+    this.cleanAttributes(detectedPlatform);
+
+    // Normalize Wix lazy-loaded and proprietary image URLs
+    if (detectedPlatform === 'wix') {
+      this.normalizeWixImages();
+    }
+
     this.makeLinksAbsolute();
 
     // Inline CSS if requested
@@ -472,10 +478,6 @@ export class NoCodeProcessor {
     const wixComponentSelectors = [
       '[data-testid="wix-ads-widget"]',
       '[data-hook="wix-code-sdk"]',
-      '[id*="wix-warmup-data"]',
-      '#wix-warmup-data',
-      '[id*="wix-viewer-model"]',
-      '#wix-viewer-model',
     ];
 
     wixComponentSelectors.forEach(selector => {
@@ -531,6 +533,56 @@ export class NoCodeProcessor {
   }
 
   /**
+   * Normalize Wix lazy-loaded images and proprietary wix:image:// URLs
+   */
+  private normalizeWixImages(): void {
+    // Fix <img> tags with placeholder src and real data-src
+    this.$('img').each((_, el) => {
+      const $el = this.$(el);
+      let src = $el.attr('src') || '';
+      const dataSrc = $el.attr('data-src') || $el.attr('data-image-src') || '';
+
+      if ((!src || src.startsWith('data:')) && dataSrc) {
+        src = dataSrc;
+      }
+      src = this.normalizeWixAssetUrl(src);
+      if (src) $el.attr('src', src);
+
+      const srcset = $el.attr('srcset') || '';
+      if (srcset && srcset.includes('wix:image://')) {
+        $el.attr('srcset', srcset.replace(/wix:image:\/\/v1\/[^,\s]+/g, m => this.normalizeWixAssetUrl(m)));
+      }
+    });
+
+    // Fix background-image URLs in inline styles
+    this.$('[style]').each((_, el) => {
+      const $el = this.$(el);
+      const style = $el.attr('style') || '';
+      if (style.includes('wix:image://') || style.includes('wix:vector://')) {
+        const updated = style.replace(
+          /wix:(image|vector):\/\/v1\/([^"')\s#]+)([^"')\s]*)/g,
+          (full) => this.normalizeWixAssetUrl(full)
+        );
+        $el.attr('style', updated);
+      }
+    });
+  }
+
+  /**
+   * Convert wix:image:// and wix:vector:// URLs to static.wixstatic.com URLs
+   */
+  private normalizeWixAssetUrl(url: string): string {
+    if (!url) return url;
+    const u = url.trim();
+    if (u.startsWith('wix:image://v1/') || u.startsWith('wix:vector://v1/')) {
+      const withoutScheme = u.replace(/^wix:(image|vector):\/\/v1\//, '');
+      const path = withoutScheme.split('#')[0].split('?')[0];
+      return `https://static.wixstatic.com/media/${path}`;
+    }
+    return u;
+  }
+
+  /**
    * Remove all meta refresh redirects
    */
   private removeMetaRefresh(): void {
@@ -542,25 +594,29 @@ export class NoCodeProcessor {
   /**
    * Clean up unnecessary attributes
    */
-  private cleanAttributes(): void {
-    // Remove platform-specific data attributes
+  private cleanAttributes(platform: Platform): void {
     this.$('*').each((_, el) => {
       const attrs = this.$(el).attr();
       if (attrs) {
         Object.keys(attrs).forEach(attr => {
-          // Remove Framer attributes
           if (attr.startsWith('data-framer')) {
             this.$(el).removeAttr(attr);
           }
-          // Remove Wix-specific attributes (but keep essential ones)
-          if (
-            attr.startsWith('data-testid') ||
-            attr.startsWith('data-hook') ||
-            attr.startsWith('data-bi') ||
-            attr.startsWith('data-comp-id') ||
-            attr.startsWith('data-packed')
-          ) {
-            this.$(el).removeAttr(attr);
+          if (platform === 'wix') {
+            // Wix: only remove tracking attributes; keep layout-critical ones
+            if (attr.startsWith('data-bi')) {
+              this.$(el).removeAttr(attr);
+            }
+          } else {
+            if (
+              attr.startsWith('data-testid') ||
+              attr.startsWith('data-hook') ||
+              attr.startsWith('data-bi') ||
+              attr.startsWith('data-comp-id') ||
+              attr.startsWith('data-packed')
+            ) {
+              this.$(el).removeAttr(attr);
+            }
           }
         });
       }

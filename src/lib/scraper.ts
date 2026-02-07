@@ -2,6 +2,7 @@ import puppeteer, { Browser, Page } from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import type { Platform } from './processor';
 
 export interface ScrapedContent {
   html: string;
@@ -21,6 +22,7 @@ export interface ScraperOptions {
   usePuppeteer?: boolean;
   timeout?: number;
   maxAssets?: number;
+  platformHint?: Platform;
 }
 
 // Simple in-memory cache for same-container requests
@@ -132,49 +134,26 @@ export class NoCodeScraper {
     // Try lightweight scraping first with cheerio (no JS rendering)
     let scrapedContent: ScrapedContent;
 
-    if (!usePuppeteer) {
-      // Fast path: cheerio-only scraping (no JS rendering)
-      scrapedContent = await this.scrapeWithCheerio(url, maxAssets);
+    const isWixSite = options.platformHint === 'wix' ||
+      /wixsite\.com|\.wix\.com|wixstudio\.io|editorx\.io/.test(this.normalizeUrl(url));
+
+    if (!usePuppeteer && !isWixSite) {
+      scrapedContent = await this.scrapeWithCheerio(url, maxAssets, options.platformHint);
+    } else if (!usePuppeteer && isWixSite) {
+      // Wix requires JS rendering; try cheerio first, auto-fallback to Puppeteer
+      try {
+        scrapedContent = await this.scrapeWithCheerio(url, maxAssets, options.platformHint);
+      } catch {
+        await this.initialize();
+        await this.recreateBrowserIfNeeded();
+        if (!this.page) throw new Error('Failed to initialize browser');
+        scrapedContent = await this.scrapeWithPuppeteer(url, options);
+      }
     } else {
-      // Full rendering with Puppeteer
       await this.initialize();
       await this.recreateBrowserIfNeeded();
-
-      if (!this.page) {
-        throw new Error('Failed to initialize browser');
-      }
-
-      // Normalize URL
-      const normalizedUrl = this.normalizeUrl(url);
-
-      try {
-        // Navigate to the page with timeout optimized for Vercel
-        await this.page.goto(normalizedUrl, {
-          waitUntil: 'domcontentloaded', // Faster than networkidle0
-          timeout,
-        });
-
-        // Reduced wait time for Vercel free tier
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Get the rendered HTML
-        const html = await this.page.content();
-        const title = await this.page.title();
-
-        // Extract limited assets to prevent memory issues
-        const assets = await this.extractAssets(this.page, maxAssets);
-
-        scrapedContent = {
-          html,
-          url: normalizedUrl,
-          title,
-          assets,
-        };
-      } catch (error) {
-        // Fallback to cheerio if Puppeteer fails
-        console.warn('Puppeteer scraping failed, falling back to cheerio:', error);
-        scrapedContent = await this.scrapeWithCheerio(url, maxAssets);
-      }
+      if (!this.page) throw new Error('Failed to initialize browser');
+      scrapedContent = await this.scrapeWithPuppeteer(url, options);
     }
 
     // Cache the result
@@ -190,32 +169,61 @@ export class NoCodeScraper {
   }
 
   // Lightweight scraping without JS rendering (much faster)
-  private async scrapeWithCheerio(url: string, maxAssets: number): Promise<ScrapedContent> {
+  private async scrapeWithCheerio(url: string, maxAssets: number, platformHint?: Platform): Promise<ScrapedContent> {
     const normalizedUrl = this.normalizeUrl(url);
+    const isWix = platformHint === 'wix' || /wixsite\.com|\.wix\.com|wixstudio\.io|editorx\.io/.test(normalizedUrl);
 
     try {
       const response = await axios.get(normalizedUrl, {
         timeout: 5000,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Dest': 'document',
         },
+        maxRedirects: 5,
+        validateStatus: (s: number) => s >= 200 && s < 500,
       });
 
-      const $ = cheerio.load(response.data);
+      const bodyText = String(response.data ?? '');
+
+      // Detect bot blocking
+      const looksBlocked =
+        response.status === 403 || response.status === 429 ||
+        /captcha|bot.detection|access.denied|unusual.traffic/i.test(bodyText) ||
+        (isWix && bodyText.length < 5000);
+
+      if (looksBlocked) {
+        throw new Error(`Site returned blocked response (status ${response.status}); retry with Puppeteer`);
+      }
+
+      const $ = cheerio.load(bodyText);
       const title = $('title').text() || 'untitled';
       const assets: Asset[] = [];
 
-      // Extract images (limited)
+      // Extract images (including Wix lazy-loaded)
       $('img').each((_, el) => {
         if (assets.length >= maxAssets) return false;
         const src = $(el).attr('src');
-        if (src && !src.startsWith('data:')) {
-          assets.push({ type: 'image', url: src });
+        const dataSrc = $(el).attr('data-src') || $(el).attr('data-image-src');
+        let imgUrl = src;
+        if ((!imgUrl || imgUrl.startsWith('data:')) && dataSrc) {
+          imgUrl = dataSrc;
+        }
+        if (imgUrl) {
+          imgUrl = this.normalizeWixAssetUrl(imgUrl);
+          if (imgUrl && !imgUrl.startsWith('data:')) {
+            assets.push({ type: 'image', url: imgUrl });
+          }
         }
         return true;
       });
 
-      // Extract stylesheets (limited)
+      // Extract stylesheets
       $('link[rel="stylesheet"]').each((_, el) => {
         if (assets.length >= maxAssets) return false;
         const href = $(el).attr('href');
@@ -236,7 +244,39 @@ export class NoCodeScraper {
     }
   }
 
+  private async scrapeWithPuppeteer(url: string, options: ScraperOptions): Promise<ScrapedContent> {
+    const { timeout = 8000, maxAssets = 50 } = options;
+    const normalizedUrl = this.normalizeUrl(url);
 
+    if (!this.page) throw new Error('Browser page not initialized');
+
+    const isWix = options.platformHint === 'wix' ||
+      /wixsite\.com|\.wix\.com|wixstudio\.io|editorx\.io/.test(normalizedUrl);
+
+    await this.page.goto(normalizedUrl, {
+      waitUntil: isWix ? 'networkidle2' : 'domcontentloaded',
+      timeout,
+    });
+
+    if (isWix) {
+      await this.page.waitForSelector('#SITE_CONTAINER, #site-root, [id="SITE_CONTAINER"]', {
+        timeout: Math.min(4000, timeout),
+      }).catch(() => {});
+      await this.page.waitForFunction(() => {
+        const el = document.querySelector('#SITE_CONTAINER, #site-root') as HTMLElement | null;
+        return !!el && (el.innerText || '').trim().length > 50;
+      }, { timeout: Math.min(3000, timeout) }).catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    const html = await this.page.content();
+    const title = await this.page.title();
+    const assets = await this.extractAssets(this.page, maxAssets);
+
+    return { html, url: normalizedUrl, title, assets };
+  }
 
   private normalizeUrl(url: string): string {
     try {
@@ -253,41 +293,68 @@ export class NoCodeScraper {
     const assets: Asset[] = [];
 
     try {
-      // Extract all assets in one evaluation for performance
       const extractedAssets = await page.evaluate((maxAssets: number) => {
         const results: any[] = [];
+        const seen = new Set<string>();
 
-        // Extract images
-        document.querySelectorAll('img').forEach((img: any) => {
-          if (results.length >= maxAssets) return false;
-          const url = img.src || img.currentSrc;
-          if (url && !url.startsWith('data:')) {
-            results.push({ type: 'image', url });
+        function addUrl(type: string, url: string) {
+          if (!url || url.startsWith('data:') || url.startsWith('blob:') || seen.has(url) || results.length >= maxAssets) return;
+          // Normalize wix:image:// URLs
+          let normalized = url;
+          if (url.startsWith('wix:image://v1/') || url.startsWith('wix:vector://v1/')) {
+            const withoutScheme = url.replace(/^wix:(image|vector):\/\/v1\//, '');
+            const path = withoutScheme.split('#')[0].split('?')[0];
+            normalized = `https://static.wixstatic.com/media/${path}`;
           }
-          return true;
+          if (seen.has(normalized)) return;
+          seen.add(normalized);
+          results.push({ type, url: normalized });
+        }
+
+        // Extract images - including Wix lazy-loaded variants
+        document.querySelectorAll('img').forEach((img: any) => {
+          addUrl('image', img.currentSrc || img.src);
+          addUrl('image', img.getAttribute('data-src'));
+          addUrl('image', img.getAttribute('data-pin-media'));
+          addUrl('image', img.getAttribute('data-image-src'));
+
+          const srcset = img.getAttribute('srcset') || img.getAttribute('data-srcset') || '';
+          if (srcset) {
+            srcset.split(',').forEach((part: string) => {
+              const u = part.trim().split(/\s+/)[0];
+              if (u) addUrl('image', u);
+            });
+          }
+        });
+
+        // Extract background images from inline styles
+        document.querySelectorAll<HTMLElement>('[style]').forEach(el => {
+          const style = el.style.backgroundImage || el.getAttribute('style') || '';
+          const matches = style.match(/url\(["']?([^"')]+)["']?\)/gi);
+          if (matches) {
+            matches.forEach(m => {
+              const u = m.replace(/url\(["']?|["']?\)/gi, '');
+              addUrl('image', u);
+            });
+          }
         });
 
         // Extract stylesheets
         if (results.length < maxAssets) {
           document.querySelectorAll('link[rel="stylesheet"]').forEach((link: any) => {
-            if (results.length >= maxAssets) return false;
-            const url = link.href;
-            if (url) {
-              results.push({ type: 'stylesheet', url });
-            }
-            return true;
+            addUrl('stylesheet', link.href);
           });
         }
 
         // Extract scripts (limited for performance)
         if (results.length < maxAssets) {
           document.querySelectorAll('script[src]').forEach((script: any) => {
-            if (results.length >= maxAssets) return false;
             const url = script.src;
-            if (url && !url.includes('analytics') && !url.includes('tracking')) {
-              results.push({ type: 'script', url });
+            if (url && !url.includes('analytics') && !url.includes('tracking') &&
+                !url.includes('bi-module') && !url.includes('fedops') &&
+                !url.includes('frog.wix.com')) {
+              addUrl('script', url);
             }
-            return true;
           });
         }
 
@@ -300,6 +367,17 @@ export class NoCodeScraper {
     }
 
     return assets;
+  }
+
+  private normalizeWixAssetUrl(url: string): string {
+    if (!url) return url;
+    const u = url.trim();
+    if (u.startsWith('wix:image://v1/') || u.startsWith('wix:vector://v1/')) {
+      const withoutScheme = u.replace(/^wix:(image|vector):\/\/v1\//, '');
+      const path = withoutScheme.split('#')[0].split('?')[0];
+      return `https://static.wixstatic.com/media/${path}`;
+    }
+    return u;
   }
 
   private cleanupCache(): void {

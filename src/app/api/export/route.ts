@@ -64,12 +64,14 @@ export async function POST(request: NextRequest) {
 
     const format = body.format || 'html';
     const usePuppeteer = body.options?.usePuppeteer ?? true;
+    const platformHint = body.platform ?? detectPlatformFromUrl(body.url);
 
     // Determine scraper options based on format and tier
     const scraperOptions: ScraperOptions = {
-      usePuppeteer: format === 'zip' ? true : usePuppeteer, // Force Puppeteer for ZIP exports
-      timeout: 6000, // Conservative timeout for free tier
-      maxAssets: format === 'zip' ? 100 : 50, // More assets for ZIP
+      usePuppeteer: format === 'zip' ? true : usePuppeteer,
+      timeout: platformHint === 'wix' ? 7500 : 6000,
+      maxAssets: format === 'zip' ? 100 : 50,
+      platformHint,
     };
 
     // Scrape the website
