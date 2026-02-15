@@ -42,6 +42,7 @@ export class NoCodeProcessor {
       this.removeFramerRedirects();
       this.removeFramerScripts();
       this.removeFramerDomains();
+      this.removeFramerMetadata();
     }
 
     if (detectedPlatform === 'wix' || platform === 'auto') {
@@ -134,10 +135,7 @@ export class NoCodeProcessor {
 
   /**
    * Remove Framer watermark elements
-   * Framer typically adds watermarks with these patterns:
-   * - class: framer-watermark, __framer-badge, framer-embed
-   * - id: framer-watermark
-   * - data attributes: data-framer-watermark
+   * Aggressively removes all Framer branding, badges, watermarks, and hidden elements
    */
   private removeFramerWatermarks(): void {
     const watermarkSelectors = [
@@ -153,17 +151,60 @@ export class NoCodeProcessor {
       'div[class*="framer-watermark"]',
       'div[class*="framer-badge"]',
       'div[id*="framer-watermark"]',
+      // Additional aggressive selectors
+      '[class*="framer-badge"]',
+      '[id*="framer-badge"]',
+      '[class*="__framer-badge"]',
+      '[data-framer-name="badge"]',
+      '[data-framer-name="Watermark"]',
+      '[data-framer-name="watermark"]',
+      '[data-framer-name="Badge"]',
+      '[data-framer-name="Framer Badge"]',
+      'a[href*="framer.com/projects"]',
+      'a[href*="framer.com/?utm"]',
     ];
 
     watermarkSelectors.forEach(selector => {
       this.$(selector).remove();
     });
 
-    // Also check for iframes containing Framer branding
+    // Remove iframes containing Framer branding
     this.$('iframe').each((_, el) => {
       const src = this.$(el).attr('src') || '';
       if (src.includes('framer') || src.includes('watermark') || src.includes('badge')) {
         this.$(el).remove();
+      }
+    });
+
+    // Remove any element whose text content is a "Made in Framer" / "Built with Framer" badge
+    this.$('a, div, span, p, footer').each((_, el) => {
+      const text = this.$(el).text().trim().toLowerCase();
+      const href = this.$(el).attr('href') || '';
+      if (
+        (text === 'made in framer' ||
+         text === 'built with framer' ||
+         text === 'powered by framer' ||
+         text === 'made with framer' ||
+         text === 'framer' ||
+         text === 'built in framer') &&
+        (href.includes('framer') || text.length < 30)
+      ) {
+        this.$(el).remove();
+      }
+    });
+
+    // Remove SVG icons that link to Framer (the Framer logo badge)
+    this.$('a svg, div svg').each((_, el) => {
+      const parent = this.$(el).parent();
+      const href = parent.attr('href') || '';
+      const parentClass = parent.attr('class') || '';
+      if (
+        href.includes('framer.com') ||
+        href.includes('framer.website') ||
+        parentClass.includes('framer-badge') ||
+        parentClass.includes('framer-watermark')
+      ) {
+        parent.remove();
       }
     });
   }
@@ -208,20 +249,26 @@ export class NoCodeProcessor {
   }
 
   /**
-   * Remove Framer-specific scripts and widgets
+   * Remove Framer-specific scripts, widgets, and runtime code
    */
   private removeFramerScripts(): void {
     this.$('script').each((_, el) => {
       const src = this.$(el).attr('src') || '';
       const scriptContent = this.$(el).html() || '';
 
-      // Remove Framer-specific scripts
       const framerPatterns = [
         /framer\.com\/scripts/,
         /framer\.website\/scripts/,
         /framer\.unbounce/,
         /framer\.metrics/,
         /__framer/,
+        /framerAnalytics/,
+        /framer-analytics/,
+        /framer\.com\/api/,
+        /framer\.com\/embed/,
+        /events\.framer\.com/,
+        /collect\.framer\.com/,
+        /router\.framer\.com/,
       ];
 
       const isFramerScript = framerPatterns.some(pattern =>
@@ -276,13 +323,13 @@ export class NoCodeProcessor {
   }
 
   /**
-   * Remove Framer domain references
+   * Aggressively remove all Framer domain references and metadata
    */
   private removeFramerDomains(): void {
     // Remove canonical links pointing to Framer
     this.$('link[rel="canonical"]').each((_, el) => {
       const href = this.$(el).attr('href') || '';
-      if (href.includes('framer.website') || href.includes('framer.com')) {
+      if (href.includes('framer.website') || href.includes('framer.com') || href.includes('.framer.')) {
         this.$(el).remove();
       }
     });
@@ -290,10 +337,143 @@ export class NoCodeProcessor {
     // Remove OG tags pointing to Framer
     this.$('meta[property*="og:"]').each((_, el) => {
       const content = this.$(el).attr('content') || '';
-      if (content.includes('framer.website') || content.includes('framer.com')) {
+      if (content.includes('framer.website') || content.includes('framer.com') || content.includes('.framer.')) {
         this.$(el).remove();
       }
     });
+
+    // Remove generator meta tag
+    this.$('meta[name="generator"]').each((_, el) => {
+      const content = this.$(el).attr('content') || '';
+      if (content.toLowerCase().includes('framer')) {
+        this.$(el).remove();
+      }
+    });
+
+    // Remove any meta tag whose name or content references Framer
+    this.$('meta').each((_, el) => {
+      const name = (this.$(el).attr('name') || '').toLowerCase();
+      const content = (this.$(el).attr('content') || '').toLowerCase();
+      const property = (this.$(el).attr('property') || '').toLowerCase();
+      if (
+        name.includes('framer') ||
+        (content.includes('framer.com') || content.includes('framer.website') || content.includes('.framer.')) ||
+        property.includes('framer')
+      ) {
+        this.$(el).remove();
+      }
+    });
+
+    // Remove link[rel="alternate"] / link[rel="preconnect"] / link[rel="dns-prefetch"] to Framer domains
+    this.$('link').each((_, el) => {
+      const href = (this.$(el).attr('href') || '').toLowerCase();
+      if (href.includes('framer.com') || href.includes('framer.website') || href.includes('.framer.')) {
+        this.$(el).remove();
+      }
+    });
+
+    // Remove HTML comments containing Framer references
+    this.$('*').contents().each((_, node) => {
+      if (node.type === 'comment') {
+        const commentText = (node.data || '').toLowerCase();
+        if (commentText.includes('framer')) {
+          this.$(node).remove();
+        }
+      }
+    });
+
+    // Strip "framer" from <html> class or data attributes
+    const $html = this.$('html');
+    const htmlClass = $html.attr('class') || '';
+    if (htmlClass.includes('framer')) {
+      $html.attr('class', htmlClass.replace(/\bframer\S*/gi, '').trim() || undefined as unknown as string);
+      if (!$html.attr('class')) $html.removeAttr('class');
+    }
+
+    // Strip Framer from <body> class
+    const $body = this.$('body');
+    const bodyClass = $body.attr('class') || '';
+    if (bodyClass.includes('framer')) {
+      $body.attr('class', bodyClass.replace(/\bframer\S*/gi, '').trim() || undefined as unknown as string);
+      if (!$body.attr('class')) $body.removeAttr('class');
+    }
+  }
+
+  /**
+   * Final aggressive pass to remove any remaining Framer metadata.
+   * Catches anything the other methods might have missed via string-level checks.
+   */
+  private removeFramerMetadata(): void {
+    // Remove <noscript> blocks that contain Framer references
+    this.$('noscript').each((_, el) => {
+      const content = (this.$(el).html() || '').toLowerCase();
+      if (content.includes('framer')) {
+        this.$(el).remove();
+      }
+    });
+
+    // Remove JSON-LD / structured data that references Framer
+    this.$('script[type="application/ld+json"]').each((_, el) => {
+      const content = this.$(el).html() || '';
+      if (content.toLowerCase().includes('framer')) {
+        try {
+          const json = JSON.parse(content);
+          const cleaned = this.removeFramerFromObject(json);
+          this.$(el).html(JSON.stringify(cleaned));
+        } catch {
+          // If unparseable and contains framer, remove entirely
+          this.$(el).remove();
+        }
+      }
+    });
+
+    // Remove style blocks that are purely Framer badge/watermark styles
+    this.$('style').each((_, el) => {
+      const content = (this.$(el).html() || '').toLowerCase();
+      if (
+        content.includes('framer-watermark') ||
+        content.includes('framer-badge') ||
+        content.includes('__framer-badge')
+      ) {
+        // Remove only the Framer-specific rules, not the whole block
+        let updated = this.$(el).html() || '';
+        updated = updated.replace(/[^{}]*framer-watermark[^}]*\{[^}]*\}/gi, '');
+        updated = updated.replace(/[^{}]*framer-badge[^}]*\{[^}]*\}/gi, '');
+        updated = updated.replace(/[^{}]*__framer-badge[^}]*\{[^}]*\}/gi, '');
+        if (updated.trim()) {
+          this.$(el).html(updated);
+        } else {
+          this.$(el).remove();
+        }
+      }
+    });
+
+    // Remove title tag content if it's just "Framer" or contains the default Framer title
+    const title = this.$('title').text().trim();
+    if (title.toLowerCase() === 'framer' || title.toLowerCase() === 'made in framer') {
+      this.$('title').text('');
+    }
+  }
+
+  /**
+   * Recursively remove Framer references from JSON-LD objects
+   */
+  private removeFramerFromObject(obj: unknown): unknown {
+    if (typeof obj === 'string') {
+      return obj.replace(/framer\.com|framer\.website/gi, '');
+    }
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.removeFramerFromObject(item));
+    }
+    if (obj && typeof obj === 'object') {
+      const result: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (key.toLowerCase().includes('framer')) continue;
+        result[key] = this.removeFramerFromObject(value);
+      }
+      return result;
+    }
+    return obj;
   }
 
   // ============================================
