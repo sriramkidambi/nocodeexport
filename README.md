@@ -1,97 +1,68 @@
-# NOCODEEXPORT
+# nocodeexport
 
-> Break free from no-code platform lock-in. Export clean, self-contained HTML from your no-code websites.
+> Because "Made with Framer" badges are annoying and you paid for that domain.
 
-[Live App](https://nocodeexport-nine.vercel.app/) | [GitHub Repository](https://github.com/sriramkidambi/nocodeexport)
+Export clean HTML from no-code platforms. Strip watermarks, kill redirects, delete analytics.
 
-NOCODEEXPORT extracts websites built with popular no-code platforms and produces clean HTML exports by removing watermarks, redirect scripts, analytics, and platform-specific branding.
+## What it does
 
-## Supported Platforms
+You built your site on Framer/Wix/Webflow. Now you want the HTML. This tool grabs it and removes the annoying stuff:
 
-- **Framer** - Remove Framer watermarks and redirect scripts
-- **Wix** - Strip Wix ads and branding
-- **Webflow** - Clean Webflow exports
-- **Carrd** - Export Carrd sites without restrictions
+| Platform | What gets removed |
+|----------|-------------------|
+| **Framer** | "Made in Framer" badge, redirect scripts, Framer metadata, analytics |
+| **Wix** | Wix ads, free site banners, Wix branding, tracking scripts |
+| **Webflow** | Basic cleanup (full support TODO) |
+| **Carrd** | Basic cleanup (full support TODO) |
 
-## Features
+## How to use
 
-- **Clean HTML Output** - Get self-contained HTML files free from platform watermarks and badges
-- **ZIP Package Export** - Download complete packages with all assets (images, stylesheets, fonts)
-- **Automatic Platform Detection** - Automatically detects the platform from URL
-- **Manual Selection** - Choose the platform manually for better control
-- **Asset Management** - Downloads and packages all external assets
-- **Link Cleanup** - Converts relative URLs to absolute URLs
-- **Privacy-Focused** - Removes analytics and tracking scripts
+```
+1. Go to https://nocodeexport-nine.vercel.app
+2. Paste your URL
+3. Choose format: Single HTML or ZIP with assets
+4. Click export
+5. Done
+```
 
-## How It Works
-
-1. Provide your website URL
-2. Select the output format (Single HTML or ZIP Package)
-3. The tool renders the page using a headless browser
-4. Watermarks, redirects, and tracking scripts are removed
-5. Get your clean, exportable HTML
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- npm, yarn, pnpm, or bun
-
-### Installation
+## Running locally
 
 ```bash
-# Install dependencies
 npm install
-# or
-yarn install
-# or
-pnpm install
-```
-
-### Development
-
-```bash
-# Run the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
+# Open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser.
+## How it works
 
-## Project Structure
+1. Scrapes your site using Puppeteer (headless Chrome) or Cheerio (lightweight mode)
+2. Detects platform automatically (URL patterns + HTML heuristics)
+3. Removes watermarks, badges, redirect scripts, analytics
+4. Converts relative URLs to absolute
+5. Returns clean HTML or ZIP with assets
 
-```
-src/
-├── app/
-│   ├── api/export/route.ts    # Main API endpoint
-│   ├── layout.tsx             # Root layout
-│   ├── page.tsx               # Main UI component
-│   └── globals.css           # Global styles
-├── components/
-│   └── ui/                   # Shadcn UI components
-└── lib/
-    ├── processor.ts          # HTML processing logic
-    ├── scraper.ts            # Web scraping functionality
-    └── utils.ts              # Utility functions
-```
+## Known issues / limitations
 
-## Tech Stack
+- **Vercel free tier**: Max 10s execution, 4.5MB response. Large sites may timeout.
+- **Wix sites**: Heavy JS loads slowly. May timeout on complex sites.
+- **Platform updates**: This is a hacky cat-and-mouse game. Platforms change their obfuscation, stuff breaks.
+- **Zipped assets**: Limited to 20 assets in ZIP mode to avoid timeouts.
 
-- **Next.js 16** - React framework
-- **React 19** - UI library
-- **Tailwind CSS** - Styling
-- **Puppeteer** - Headless browser automation
-- **Cheerio** - HTML parsing and manipulation
-- **Adm-Zip** - ZIP file creation
+## Tech stack
 
-## Disclaimer
+- **Next.js 16** + React 19
+- **Puppeteer** (@sparticuz/chromium for Vercel)
+- **Cheerio** for lightweight scraping (no JS rendering)
+- **Tailwind CSS** + shadcn/ui
 
-> This is a hacky solution for personal and experimental use only. The tool may break as platforms update their code. It is not recommended for production workloads. For mission-critical sites, please use official export features provided by the platforms.
+## Why I built this
+
+No-code platforms are great until you want to leave. Official export features are either missing or cost money. This is my "screw that" solution.
 
 ## License
 
 MIT
+
+---
+
+**Note**: This is for personal/experimental use. Don't rely on it for mission-critical stuff. Platforms will break it eventually.
