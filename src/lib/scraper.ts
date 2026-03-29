@@ -65,9 +65,8 @@ export class NoCodeScraper {
           '--disable-web-security',
           '--disable-features=IsolateOrigins,site-per-process',
         ],
-        defaultViewport: chromium.defaultViewport,
         executablePath,
-        headless: chromium.headless,
+        headless: true,
       });
 
       this.page = await this.browser.newPage();

@@ -4,7 +4,7 @@ import { useState, FormEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Loader2, CheckCircle, AlertCircle, Terminal, FileArchive, Shield, Code, ArrowRight, Github, Cpu, Network, AlertTriangle, Zap } from 'lucide-react';
+import { Download, Loader2, CheckCircle, AlertCircle, Terminal, FileArchive, Shield, Code, ArrowRight, GitBranch, Cpu, Network, AlertTriangle, Zap } from 'lucide-react';
 
 type Platform = 'auto' | 'framer' | 'wix' | 'webflow' | 'carrd';
 
@@ -154,7 +154,7 @@ export default function Home() {
             <nav className="hidden sm:flex items-center gap-6 text-sm">
               <a href="#features" className="text-muted-foreground hover:text-primary transition-colors font-mono text-xs uppercase tracking-wider">[Features]</a>
               <a href="https://github.com/sriramkidambi/nocodeexport" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5">
-                <Github className="w-5 h-5" />
+                <GitBranch className="w-5 h-5" />
                 <span className="font-mono text-xs">GitHub</span>
               </a>
             </nav>
@@ -495,13 +495,13 @@ export default function Home() {
               Built with Next.js + Puppeteer
             </p>
             <div className="flex items-center gap-4">
-              <a 
-                href="https://github.com/sriramkidambi/nocodeexport" 
-                target="_blank" 
+              <a
+                href="https://github.com/sriramkidambi/nocodeexport"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5"
               >
-                <Github className="w-4 h-4" />
+                <GitBranch className="w-4 h-4" />
                 sriramkidambi/nocodeexport
               </a>
               <span className="text-muted-foreground/50">|</span>
