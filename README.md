@@ -2,6 +2,8 @@
 
 > Because "Made with Framer" badges are annoying and you paid for that domain.
 
+[![GitHub](https://img.shields.io/badge/GitHub-Repo-181717?logo=github)](https://github.com/sriramkidambi/nocodeexport) [![Live](https://img.shields.io/badge/Live-nocodeexport--nine.vercel.app-000?logo=vercel)](https://nocodeexport-nine.vercel.app)
+
 Export clean HTML from no-code platforms. Strip watermarks, kill redirects, delete analytics.
 
 ## What it does
@@ -18,7 +20,7 @@ You built your site on Framer/Wix/Webflow. Now you want the HTML. This tool grab
 ## How to use
 
 ```
-1. Go to https://nocodeexport-nine.vercel.app
+1. Go to https://nocodeexport-nine.vercel.app (or [run locally](#running-locally))
 2. Paste your URL
 3. Choose format: Single HTML or ZIP with assets
 4. Click export
